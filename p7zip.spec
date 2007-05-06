@@ -1,7 +1,7 @@
 Summary: Very high compression ratio file archiver
 Name: p7zip
 Version: 4.44
-Release: 2%{?dist}
+Release: 2%{?dist}.1
 License: LGPL
 Group: Applications/Archiving
 URL: http://p7zip.sourceforge.net/
@@ -95,6 +95,9 @@ EOF
 
 
 %changelog
+* Sun May 06 2007 Thorsten Leemhuis <fedora [AT] leemhuis [DOT] info>
+- rebuilt for RHEL5 final
+
 * Thu Mar  1 2007 Matthias Saou <http://freshrpms.net/> 4.44-2
 - Remove _smp_mflags since some builds fail with suspicious errors.
 
