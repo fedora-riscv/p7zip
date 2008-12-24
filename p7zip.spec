@@ -1,8 +1,9 @@
 Summary: Very high compression ratio file archiver
 Name: p7zip
-Version: 4.44
-Release: 2%{?dist}
-License: LGPL
+Version: 4.61
+Release: 1%{?dist}
+# Files under C/Compress/Lzma/ are dual LGPL or CPL
+License: LGPLv2 and (LGPLv2+ or CPL)
 Group: Applications/Archiving
 URL: http://p7zip.sourceforge.net/
 # RAR sources removed since their license is incompatible with the LGPL
@@ -13,7 +14,16 @@ URL: http://p7zip.sourceforge.net/
 # rm -f p7zip_${VERSION}/DOCS/unRarLicense.txt
 # tar --numeric-owner -cjvf p7zip_${VERSION}_src_all-norar.tar.bz2 p7zip_${VERSION}
 Source: p7zip_%{version}_src_all-norar.tar.bz2
+Patch0: p7zip_4.61-norar.patch
+Patch1: p7zip_4.58-install.patch
+Patch2: p7zip_4.51-nostrip.patch
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
+%ifarch %{ix86}
+BuildRequires: nasm
+%endif
+%ifarch x86_64
+BuildRequires: yasm
+%endif
 
 %description
 p7zip is a port of 7za.exe for Unix. 7-Zip is a file archiver with a very high
@@ -32,45 +42,46 @@ This package contains also a virtual file system for Midnight Commander.
 
 %prep
 %setup -q -n %{name}_%{version}
-
-# Create wrapper scripts, as 7zCon.sfx and Codecs/Formats need to be in the
-# same directory as the binaries, and we don't want them in %{_bindir}.
-%{__cat} << 'EOF' > 7za.sh
-#!/bin/sh
-exec %{_libexecdir}/p7zip/7za "$@"
-EOF
-
-%{__cat} << 'EOF' > 7z.sh
-#!/bin/sh
-exec %{_libexecdir}/p7zip/7z "$@"
-EOF
+%patch0 -p1 -b .norar
+%patch1 -p1 -b .install
+%patch2 -p1 -b .nostrip
+# Move docs early so that they don't get installed by "make install" and we
+# can include them in %%doc
+%{__mv} DOCS docs
+%{__mv} ChangeLog README TODO docs/
+# And fix useless executable bit while we're at it
+find docs    -type f -exec chmod -x {} \;
+find contrib -type f -exec chmod -x {} \;
 
 
 %build
-%ifarch %{ix86} ppc
-%{__cp} -f makefile.linux_x86_ppc_alpha__gcc_4.X makefile.machine
+%ifarch %{ix86}
+%{__cp} -f makefile.linux_x86_asm_gcc_4.X makefile.machine
 %endif
 %ifarch x86_64
-%{__cp} -f makefile.linux_amd64 makefile.machine
+%{__cp} -f makefile.linux_amd64_asm makefile.machine
+%endif
+%ifarch ppc ppc64
+%{__cp} -f makefile.linux_x86_ppc_alpha_gcc_4.X makefile.machine
 %endif
 
-# Use optflags
-%{__perl} -pi -e 's|^ALLFLAGS=.*|ALLFLAGS=-Wall %{optflags} -fPIC \\|g' \
-    makefile.machine
 # Don't use _smp_mflags since the build sometimes fails with it (as of 4.44)
-%{__make} 7z 7za sfx
+%{__make} %{?_smp_mflags} all2 \
+    OPTFLAGS="%{optflags}" \
+    DEST_HOME=%{_prefix} \
+    DEST_BIN=%{_bindir} \
+    DEST_SHARE=%{_libexecdir}/p7zip \
+    DEST_MAN=%{_mandir}
 
 
 %install
 %{__rm} -rf %{buildroot}
-
-# Install binaries (7za, 7z, 7zCon.sfx and Codecs/Formats)
-%{__mkdir_p} %{buildroot}%{_libexecdir}/p7zip/
-%{__cp} -a bin/* %{buildroot}%{_libexecdir}/p7zip/
-
-# Install wrapper scripts
-%{__install} -D -m 0755 7z.sh  %{buildroot}%{_bindir}/7z
-%{__install} -D -m 0755 7za.sh %{buildroot}%{_bindir}/7za
+%{__make} install \
+    DEST_DIR=%{buildroot} \
+    DEST_HOME=%{_prefix} \
+    DEST_BIN=%{_bindir} \
+    DEST_SHARE=%{_libexecdir}/p7zip \
+    DEST_MAN=%{_mandir}
 
 
 %clean
@@ -79,22 +90,58 @@ EOF
 
 %files
 %defattr(-,root,root,-)
-%doc ChangeLog README TODO DOCS/*
+%doc docs/*
 %{_bindir}/7za
 %dir %{_libexecdir}/p7zip/
 %{_libexecdir}/p7zip/7za
 %{_libexecdir}/p7zip/7zCon.sfx
+%{_mandir}/man1/7za.1*
+%exclude %{_mandir}/man1/7zr.1*
 
 %files plugins
 %defattr(-,root,root,-)
 %doc contrib/
 %{_bindir}/7z
 %{_libexecdir}/p7zip/7z
-%{_libexecdir}/p7zip/Codecs/
-%{_libexecdir}/p7zip/Formats/
+%{_libexecdir}/p7zip/7z.so
+#{_libexecdir}/p7zip/Codecs/
+#{_libexecdir}/p7zip/Formats/
+%{_mandir}/man1/7z.1*
 
 
 %changelog
+* Tue Dec 23 2008 Matthias Saou <http://freshrpms.net/> 4.61-1
+- Update to 4.61.
+- Update norar patch.
+- Use asm for x86 too (nasm).
+
+* Wed Jun 18 2008 Matthias Saou <http://freshrpms.net/> 4.58-1
+- Update to 4.58.
+- Update norar patch.
+- Update install patch.
+
+* Tue Feb 19 2008 Fedora Release Engineering <rel-eng@fedoraproject.org>
+- Autorebuild for GCC 4.3
+
+* Wed Aug 22 2007 Matthias Saou <http://freshrpms.net/> 4.51-3
+- Rebuild for new BuildID feature.
+
+* Thu Aug  9 2007 Matthias Saou <http://freshrpms.net/> 4.51-2
+- Update License field some more (LGPL+ to LGPLv2+).
+
+* Sun Aug  5 2007 Matthias Saou <http://freshrpms.net/> 4.51-1
+- Update to 4.51.
+- Update License field.
+
+* Tue Jun 19 2007 Matthias Saou <http://freshrpms.net/> 4.47-1
+- Update to 4.47.
+- Include now required patch to exclude removed Rar bits from makefiles.
+- Switch to using "make install" for installation... so patch and hack.
+- Use the asm makefile for x86_64, so build require yasm for it too.
+- Add ppc64 to the main %%ifarch.
+- Remove no longer included Codecs and Formats dirs (7z.so replaces them?).
+- Remove our wrapper scripts, since the install script creates its own.
+
 * Thu Mar  1 2007 Matthias Saou <http://freshrpms.net/> 4.44-2
 - Remove _smp_mflags since some builds fail with suspicious errors.
 
